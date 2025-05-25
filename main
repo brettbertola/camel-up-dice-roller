@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camel Up Dice Roller - 8-Bit Jungle</title>    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Press Start 2P', cursive;
+            overscroll-behavior: none; 
+            background: linear-gradient(to bottom, 
+                #4A90E2 0%, /* Sky Blue */
+                #72C6E8 30%, /* Lighter Sky */
+                #F5D0A9 30%, /* Pale Orange - Upper Sand */
+                #E8B07A 60%, /* Sandy Brown - Main Sand */
+                #D19A66 70%, /* Darker Sand */
+                #5A8B4C 70%, /* Jungle Green Base */
+                #3A6B2C 100% /* Darker Jungle Green */
+            );
+            background-size: cover;
+            background-position: center;
+            background-attachment: fixed; 
+            color: #2E2E2E; 
+            transition: background-image 1s ease-in-out; 
+            overflow: hidden; /* Prevent scrollbars during fullscreen animation */
+        }
+
+        .game-container {
+            background-color: rgba(255, 255, 230, 0.85); 
+            border: 4px solid #000; 
+            box-shadow: 8px 8px 0px #000000; 
+            border-radius: 0; 
+            position: relative; 
+            z-index: 1;
+            transition: opacity 0.3s ease-in-out;
+        }
+        .game-container.hidden-during-animation {
+            opacity: 1;
+            pointer-events: none;
+        }
+
+
+        .dice-cube { 
+            width: 50px; 
+            height: 50px;
+            border-radius: 0;
+            border: 3px solid #000;
+            font-size: 1.25rem; 
+            color: white;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+            box-shadow: 4px 4px 0px rgba(0,0,0,0.7); 
+        }
+        .dice-cube.unavailable { opacity: 0.4; filter: grayscale(50%); box-shadow: none; }
+        
+        .history-dice-item, .summary-dice-item {
+            width: 40px; 
+            height: 40px;
+            border-radius: 0;
+            border: 2px solid #000;
+            font-size: 0.8rem; 
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.6);
+            display: flex; 
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        .history-dice-item-value, .summary-dice-item-value { font-size: 1rem; line-height: 1; }
+        .history-dice-item-camel, .summary-dice-item-camel { font-size: 0.5rem; margin-top: 1px; line-height: 1;}
+
+        .current-roll-card {
+            border: 3px solid #000;
+            border-radius: 0;
+            --default-bg: rgba(255, 248, 220, 0.85); 
+            background-color: var(--default-bg); 
+            box-shadow: 6px 6px 0px #000000;
+            overflow: hidden; 
+            /* MODIFIED: Specific transitions, not 'all' */
+            transition: background-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out; 
+        }
+        
+        /* Fullscreen animation styles */
+        .current-roll-card.fullscreen-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 100; 
+            border-radius: 0; 
+            border: none; 
+            box-shadow: none; 
+            padding: 20px; 
+            /* No transition specified here, so geometric changes will be instant */
+        }
+        .fullscreen-animation #currentRollColorName {
+            font-size: 5vw; 
+            line-height: 1.2;
+        }
+        .fullscreen-animation #currentRollValue {
+            font-size: 15vw; 
+            line-height: 1;
+        }
+
+
+        .current-roll-card.active-roll-transform:not(.fullscreen-animation) { 
+            transform: scale(1.03) translate(2px, 2px); 
+            box-shadow: 3px 3px 0px #000000;
+            /* This transform can have its own transition if desired, or be instant */
+            /* For now, it's instant as it's not in the .current-roll-card transition list */
+        }
+        
+        .slot-text-reveal {
+            display: inline-block; 
+            opacity: 0;
+            transform: translateY(20px) scale(0.8);
+            animation: slot-text-land 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+        @keyframes slot-text-land {
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+        
+        .bg-custom-black { background-color: #1A1A1A; }
+        .text-custom-black { color: #E0E0E0; }
+        .bg-custom-yellow { background-color: #FFD700; } 
+        .text-custom-yellow { color: #4A2E0D; }
+        .bg-custom-purple { background-color: #9370DB; } 
+        .text-custom-purple { color: #FFFFFF; }
+        .bg-custom-blue { background-color: #4169E1; } 
+        .text-custom-blue { color: #FFFFFF; }
+        .bg-custom-green { background-color: #32CD32; } 
+        .text-custom-green { color: #FFFFFF; }
+        .bg-custom-red { background-color: #FF4500; } 
+        .text-custom-red { color: #FFFFFF; }
+
+        #rollHistory {
+            background-color: rgba(245, 222, 179, 0.7); 
+            border: 2px solid #000;
+            border-radius: 0;
+        }
+        #messageArea {
+            color: #8B0000; 
+            text-shadow: 1px 1px 0px #FFF8DC; 
+        }
+        .background-loading-indicator {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px 10px;
+            font-size: 0.7rem;
+            z-index: 1000;
+            border: 1px solid #fff;
+        }
+
+        body:focus-visible { outline: 3px dashed #FF00FF; }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <div id="bgLoadingIndicator" class="background-loading-indicator hidden">Generating Background...</div>
+
+    <div id="gameContainer" class="w-full max-w-2xl p-6 md:p-8 rounded-xl game-container">
+        <header class="mb-6 text-center">
+            <h1 class="text-2xl md:text-3xl font-bold">Camel Up Dice</h1>
+            <p class="text-xs mt-2">Press SPACE to roll. Resets after 5.</p>
+        </header>
+
+        <div id="currentRollDisplay" class="mb-8 p-4 md:p-6 rounded-lg text-center min-h-[140px] flex flex-col justify-center items-center current-roll-card">
+            <p class="text-xl md:text-2xl font-bold" id="currentRollColorName">Press Space</p>
+            <p class="text-4xl md:text-5xl font-extrabold mt-2" id="currentRollValue"></p>
+        </div>
+
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-3 text-center">Available Dice</h2>
+            <div id="availableDicePool" class="grid grid-cols-3 sm:grid-cols-6 gap-2 justify-center">
+                </div>
+        </div>
+        
+        <div class="mb-6">
+            <h2 class="text-lg font-semibold mb-3 text-center">Roll History</h2>
+            <div id="rollHistory" class="p-3 rounded-lg min-h-[70px] flex justify-center items-center space-x-1.5 flex-wrap">
+                 <p class="text-xs italic text-center w-full" id="historyPlaceholder">No rolls yet...</p>
+            </div>
+        </div>
+
+        <div id="messageArea" class="text-center font-medium min-h-[20px] text-sm">
+            </div>
+    </div>
+
+    <footer class="mt-6 text-center text-xs">
+        <p style="color: #FFF8DC;">8-Bit Camel Roller</p>
+    </footer>
+
+    <script>
+        // --- Configuration ---
+        const DICE_DEFINITIONS = [
+            { id: 'blue', name: 'Blue', colorClass: 'bg-custom-blue', textColorClass: 'text-custom-blue', actualHexColor: '#4169E1' },
+            { id: 'black', name: 'Black', colorClass: 'bg-custom-black', textColorClass: 'text-custom-black', isSpecial: true, actualHexColor: '#1A1A1A' },
+            { id: 'green', name: 'Green', colorClass: 'bg-custom-green', textColorClass: 'text-custom-green', actualHexColor: '#32CD32' },
+            { id: 'red', name: 'Red', colorClass: 'bg-custom-red', textColorClass: 'text-custom-red', actualHexColor: '#FF4500' },
+            { id: 'yellow', name: 'Yellow', colorClass: 'bg-custom-yellow', textColorClass: 'text-custom-yellow', actualHexColor: '#FFD700' },
+            { id: 'purple', name: 'Purple', colorClass: 'bg-custom-purple', textColorClass: 'text-custom-purple', actualHexColor: '#9370DB' }
+        ];
+        const DIE_FACES = [1, 1, 2, 2, 3, 3]; 
+        const UNIQUE_DIE_FACES = [1, 2, 3];
+        const MAX_ROLLS_PER_ROUND = 5;
+        const SPECIAL_CAMEL_TYPES = ['WHT', 'BLK']; 
+        
+        const INITIAL_FAST_SPIN_DURATION = 800; 
+        const SLOWDOWN_DURATION = 1000; 
+        const MIN_SPIN_INTERVAL = 50; 
+        const MAX_SPIN_INTERVAL = 250; 
+        const FINAL_TEXT_ANIM_DURATION = 400; 
+
+        const BACKGROUND_IMAGE_PROMPT = "A beautiful 8-bit pixel art landscape. The top half depicts a vibrant sky transitioning into a Sahara desert scene with rolling sand dunes. The bottom half shows a lush jungle dreamland with pixelated palm trees and exotic plants. The style is retro, colorful, and suitable as a background for a game. Horizontal aspect ratio, like 16:9.";
+
+        // --- State Variables ---
+        let availableColorIds = [];
+        let currentRoundRolls = [];
+        let rollsThisRoundCount = 0;
+        let isRoundOver = false;
+        let animationFrameId = null; 
+        let currentAnimationPromise = null; 
+
+        // --- DOM Elements ---
+        const gameContainer = document.getElementById('gameContainer');
+        const currentRollDisplay = document.getElementById('currentRollDisplay');
+        const availableDicePoolDiv = document.getElementById('availableDicePool');
+        const rollHistoryDiv = document.getElementById('rollHistory');
+        const messageArea = document.getElementById('messageArea');
+        const bgLoadingIndicator = document.getElementById('bgLoadingIndicator');
+
+        // --- Helper Functions ---
+        const easeOutQuad = t => t * (2 - t); 
+
+        // --- Core Functions ---
+        async function generateAndSetBackgroundImage() {
+            bgLoadingIndicator.classList.remove('hidden');
+            try {
+                const payload = { instances: [{ prompt: BACKGROUND_IMAGE_PROMPT }], parameters: { "sampleCount": 1 } };
+                const apiKey = ""; 
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`;
+                
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    const errorBody = await response.text();
+                    throw new Error(`Background API request failed with status ${response.status}: ${errorBody}`);
+                }
+                const result = await response.json();
+                if (result.predictions && result.predictions.length > 0 && result.predictions[0].bytesBase64Encoded) {
+                    const imageUrl = `data:image/png;base64,${result.predictions[0].bytesBase64Encoded}`;
+                    document.body.style.backgroundImage = `url('${imageUrl}')`;
+                } else {
+                    console.error('Background Image: Unexpected response structure or no image data:', result);
+                }
+            } catch (error) {
+                console.error('Error generating background image:', error);
+            } finally {
+                 bgLoadingIndicator.classList.add('hidden');
+            }
+        }
+
+        function resetCurrentRollDisplayArea(isInterrupt = false) {
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+             if (currentAnimationPromise && !isInterrupt) { 
+                currentAnimationPromise = null; 
+            }
+
+
+            const initialMessage = (rollsThisRoundCount === 0 && currentRoundRolls.length === 0) ? "Press Space" : "Next Roll!";
+            currentRollDisplay.innerHTML = `
+                <p class="text-xl md:text-2xl font-bold" id="currentRollColorName">${initialMessage}</p>
+                <p class="text-4xl md:text-5xl font-extrabold mt-2" id="currentRollValue"></p>
+            `;
+            currentRollDisplay.className = 'mb-8 p-4 md:p-6 rounded-lg text-center min-h-[140px] flex flex-col justify-center items-center current-roll-card';
+            currentRollDisplay.style.backgroundColor = getComputedStyle(currentRollDisplay).getPropertyValue('--default-bg');
+            DICE_DEFINITIONS.forEach(def => currentRollDisplay.classList.remove(def.colorClass));
+            gameContainer.classList.remove('hidden-during-animation');
+        }
+
+        function initializeOrResetDice() {
+            isRoundOver = false; 
+            rollsThisRoundCount = 0;
+            currentRoundRolls = [];
+            availableColorIds = DICE_DEFINITIONS.map(d => d.id);
+            
+            updateAvailableDiceDisplay(); 
+            updateRollHistoryDisplay();   
+            resetCurrentRollDisplayArea(true); 
+            
+            if (messageArea.textContent.includes("Round End")) {
+                 messageArea.textContent = '';
+            }
+        }
+
+        function updateAvailableDiceDisplay() {
+            availableDicePoolDiv.innerHTML = ''; 
+            DICE_DEFINITIONS.forEach(dieDef => {
+                const dieDiv = document.createElement('div');
+                dieDiv.id = `die-${dieDef.id}`;
+                dieDiv.className = `dice-cube ${dieDef.colorClass} ${dieDef.textColorClass}`;
+                dieDiv.textContent = dieDef.name.substring(0,1); 
+
+                if (!availableColorIds.includes(dieDef.id)) {
+                    dieDiv.classList.add('unavailable');
+                }
+                availableDicePoolDiv.appendChild(dieDiv);
+            });
+        }
+        
+        function getDieRollValue() {
+            return DIE_FACES[Math.floor(Math.random() * DIE_FACES.length)];
+        }
+
+        function performRoll() {
+            if (currentAnimationPromise) return; 
+
+            if (isRoundOver) {
+                initializeOrResetDice();
+                return; 
+            }
+
+            if (availableColorIds.length === 0) {
+                if (rollsThisRoundCount < MAX_ROLLS_PER_ROUND) {
+                    displayMessage("Error! No dice! Reset.", 3000);
+                    initializeOrResetDice();
+                }
+                return;
+            }
+
+            const randomIndex = Math.floor(Math.random() * availableColorIds.length);
+            const chosenColorId = availableColorIds.splice(randomIndex, 1)[0]; 
+            const chosenDieDefinition = DICE_DEFINITIONS.find(d => d.id === chosenColorId);
+            const rolledValue = getDieRollValue(); 
+
+            const rollData = {
+                colorName: chosenDieDefinition.name,
+                colorId: chosenDieDefinition.id,
+                colorClass: chosenDieDefinition.colorClass,
+                textColorClass: chosenDieDefinition.textColorClass,
+                actualHexColor: chosenDieDefinition.actualHexColor,
+                value: rolledValue,
+                camelType: null 
+            };
+
+            if (chosenDieDefinition.isSpecial) {
+                rollData.camelType = SPECIAL_CAMEL_TYPES[Math.floor(Math.random() * SPECIAL_CAMEL_TYPES.length)];
+            }
+
+            currentRoundRolls.push(rollData); 
+            rollsThisRoundCount++;
+            
+            gameContainer.classList.add('hidden-during-animation');
+
+            currentAnimationPromise = dramaticDiceReveal(rollData)
+                .catch(err => {
+                    console.error("Reveal animation error:", err);
+                    gameContainer.classList.remove('hidden-during-animation');
+                    resetCurrentRollDisplayArea(true);
+                })
+                .finally(() => {
+                    currentAnimationPromise = null; 
+                    updateRollHistoryDisplay(); 
+                    gameContainer.classList.remove('hidden-during-animation'); 
+
+                    if (rollsThisRoundCount === MAX_ROLLS_PER_ROUND && !isRoundOver) {
+                        isRoundOver = true;
+                        setTimeout(() => {
+                            displayRoundEndedSummary();
+                            displayMessage("Round End! Space for New.", 0); 
+                        }, 100); 
+                    }
+                });
+            
+            updateAvailableDiceDisplay(); 
+        }
+
+        async function dramaticDiceReveal(rollData) {
+            return new Promise(async (resolveAnimation) => {
+                currentRollDisplay.classList.add('fullscreen-animation'); 
+                currentRollDisplay.innerHTML = `
+                    <p class="font-bold" id="currentRollColorName"></p>
+                    <p class="font-extrabold mt-2" id="currentRollValue"></p>
+                `; 
+                const colorNameEl = document.getElementById('currentRollColorName');
+                const valueEl = document.getElementById('currentRollValue');
+
+                const animationStartTime = performance.now();
+                let lastColorUpdateTime = 0;
+                let lastNumberUpdateTime = 0;
+                let colorCycleIndex = 0;
+                let numberCycleIndex = 0;
+                let landed = false;
+
+                function spinLoop(timestamp) {
+                    if (!currentAnimationPromise) { 
+                        if(animationFrameId) cancelAnimationFrame(animationFrameId);
+                        animationFrameId = null;
+                        currentRollDisplay.classList.remove('fullscreen-animation'); 
+                        resolveAnimation(); 
+                        return;
+                    }
+
+                    const elapsedTime = timestamp - animationStartTime;
+                    let currentInterval;
+                    let phaseOver = false;
+
+                    if (elapsedTime < INITIAL_FAST_SPIN_DURATION) { 
+                        currentInterval = MIN_SPIN_INTERVAL;
+                    } else if (elapsedTime < INITIAL_FAST_SPIN_DURATION + SLOWDOWN_DURATION) { 
+                        const slowdownProgress = (elapsedTime - INITIAL_FAST_SPIN_DURATION) / SLOWDOWN_DURATION;
+                        currentInterval = MIN_SPIN_INTERVAL + (MAX_SPIN_INTERVAL - MIN_SPIN_INTERVAL) * easeOutQuad(slowdownProgress);
+                    } else { 
+                        phaseOver = true;
+                    }
+
+                    if (timestamp - lastColorUpdateTime > currentInterval && !phaseOver) {
+                        const displayDie = DICE_DEFINITIONS[colorCycleIndex % DICE_DEFINITIONS.length];
+                        currentRollDisplay.style.backgroundColor = displayDie.actualHexColor;
+                        colorNameEl.textContent = displayDie.name;
+                        colorNameEl.className = `font-bold ${displayDie.textColorClass}`; 
+                        valueEl.className = `font-extrabold mt-2 ${displayDie.textColorClass}`;
+                        lastColorUpdateTime = timestamp;
+                        colorCycleIndex++;
+                    }
+
+                    if (timestamp - lastNumberUpdateTime > currentInterval / 1.5 && !phaseOver) { 
+                        valueEl.textContent = UNIQUE_DIE_FACES[numberCycleIndex % UNIQUE_DIE_FACES.length];
+                        lastNumberUpdateTime = timestamp;
+                        numberCycleIndex++;
+                    }
+                    
+                    if (phaseOver && !landed) {
+                        landed = true;
+                        cancelAnimationFrame(animationFrameId); 
+                        animationFrameId = null;
+
+                        currentRollDisplay.style.backgroundColor = rollData.actualHexColor;
+                        DICE_DEFINITIONS.forEach(def => currentRollDisplay.classList.remove(def.colorClass)); 
+                        
+                        currentRollDisplay.classList.remove('fullscreen-animation');
+                        currentRollDisplay.classList.add(rollData.colorClass); 
+                        
+                        currentRollDisplay.innerHTML = `
+                            <p class="text-xl md:text-2xl font-bold ${rollData.textColorClass}" id="currentRollColorName"><span class="slot-text-reveal">${rollData.colorName}${rollData.camelType ? ` (${rollData.camelType})` : ''}</span></p>
+                            <p class="text-4xl md:text-5xl font-extrabold mt-2 ${rollData.textColorClass}" id="currentRollValue"><span class="slot-text-reveal">${rollData.value}</span></p>
+                        `;
+                        
+                        setTimeout(() => {
+                            // active-roll-transform is for the non-fullscreen card "pop"
+                            // It should only be removed if the card is not in round-end summary state
+                            if (!isRoundOver) { 
+                                // currentRollDisplay.classList.remove('active-roll-transform'); 
+                                // This class is added in performRoll and removed here.
+                                // For fullscreen, it's not relevant, but for normal card state it is.
+                                // Let's ensure it's not on the card when it's back to normal size.
+                            }
+                            resolveAnimation();
+                        }, FINAL_TEXT_ANIM_DURATION);
+                        return; 
+                    }
+
+                    if (!landed) {
+                        animationFrameId = requestAnimationFrame(spinLoop);
+                    }
+                }
+                animationFrameId = requestAnimationFrame(spinLoop);
+            });
+        }
+
+
+        function displayRoundEndedSummary() {
+            if (animationFrameId) { 
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
+            }
+            currentAnimationPromise = null; 
+
+            currentRollDisplay.innerHTML = `
+                <p class="text-sm mb-2 font-semibold" style="color: #4A2E0D;">Round Ended</p>
+                <div class="flex justify-center items-center space-x-1.5 flex-wrap">
+                    ${currentRoundRolls.map(roll => `
+                        <div class="summary-dice-item ${roll.colorClass} ${roll.textColorClass}">
+                            <span class="summary-dice-item-value">${roll.value}</span>
+                            ${roll.camelType ? `<span class="summary-dice-item-camel">${roll.camelType}</span>` : `<span class="summary-dice-item-camel">&nbsp;</span>`}
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            currentRollDisplay.className = 'mb-8 p-4 md:p-6 rounded-lg text-center min-h-[140px] flex flex-col justify-center items-center current-roll-card';
+            currentRollDisplay.style.backgroundColor = 'rgba(245, 222, 179, 0.8)'; 
+            currentRollDisplay.classList.remove('fullscreen-animation', 'active-roll-transform'); 
+            DICE_DEFINITIONS.forEach(def => currentRollDisplay.classList.remove(def.colorClass)); 
+            gameContainer.classList.remove('hidden-during-animation'); 
+        }
+        
+        function updateRollHistoryDisplay() {
+            rollHistoryDiv.innerHTML = ''; 
+            if (currentRoundRolls.length === 0) {
+                const placeholder = document.createElement('p');
+                placeholder.className = "text-xs italic text-center w-full";
+                placeholder.id = "historyPlaceholder";
+                placeholder.textContent = "No rolls yet...";
+                rollHistoryDiv.appendChild(placeholder);
+            } else {
+                currentRoundRolls.forEach(roll => { 
+                    const historyItem = document.createElement('div');
+                    historyItem.className = `history-dice-item ${roll.colorClass} ${roll.textColorClass}`;
+                    
+                    const valueSpan = document.createElement('span');
+                    valueSpan.className = 'history-dice-item-value';
+                    valueSpan.textContent = roll.value;
+                    historyItem.appendChild(valueSpan);
+
+                    const camelSpan = document.createElement('span');
+                    camelSpan.className = 'history-dice-item-camel';
+                    camelSpan.innerHTML = roll.camelType ? `${roll.camelType}` : '&nbsp;'; 
+                    historyItem.appendChild(camelSpan);
+                    
+                    rollHistoryDiv.appendChild(historyItem);
+                });
+            }
+        }
+
+        function displayMessage(text, duration = 2500) {
+            messageArea.textContent = text;
+            if (duration > 0) { 
+                setTimeout(() => {
+                    if (messageArea.textContent === text) { 
+                        messageArea.textContent = '';
+                    }
+                }, duration);
+            }
+        }
+
+        function handleKeyPress(event) {
+            if (event.code === 'Space' || event.key === ' ') {
+                event.preventDefault(); 
+                performRoll();
+            }
+        }
+
+        document.addEventListener('keydown', handleKeyPress);
+
+        window.onload = () => {
+            initializeOrResetDice(); 
+            generateAndSetBackgroundImage(); 
+            document.body.tabIndex = -1; 
+            document.body.focus(); 
+        };
+    </script>
+</body>
+</html>
